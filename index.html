@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SmartTierlist Maker</title>
+  <style>
+    :root{
+      --bg:#0b0b0c;
+      --panel:#1b1b1e;
+      --panel2:#242429;
+      --line:#2e2e35;
+      --text:#f2f2f4;
+      --muted:#b8b8c2;
+      --accent:#8a2be2;  /* purple */
+      --accent2:#a855f7;
+      --shadow: 0 12px 30px rgba(0,0,0,.45);
+      --radius:12px;
+      --rowH:86px;
+
+      /* NEW: cover size (editable via slider, persisted) */
+      --coverSize:58px;
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(138,43,226,.18), transparent 50%),
+                  radial-gradient(900px 500px at 80% 10%, rgba(168,85,247,.12), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+    }
+    .wrap{ max-width:1100px; margin:0 auto; padding:18px 18px 40px; }
+
+    /* Header */
+    .topbar{
+      display:flex; align-items:flex-start; justify-content:space-between;
+      gap:16px; padding:10px 0 14px;
+    }
+    .brand{
+      font-weight:800; letter-spacing:.6px; font-size:18px;
+      text-transform:uppercase; line-height:1.1;
+    }
+    .controls{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+    button, .btn{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(138,43,226,.95), rgba(138,43,226,.75));
+      color:white; padding:9px 12px; border-radius:10px;
+      font-weight:700; font-size:12px; cursor:pointer;
+      box-shadow: 0 8px 20px rgba(138,43,226,.18);
+      transition: transform .06s ease, filter .15s ease;
+      user-select:none;
+    }
+    button:hover{ filter:brightness(1.08); }
+    button:active{ transform: translateY(1px); }
+    button.secondary{
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      color: var(--text); box-shadow:none;
+    }
+    button.danger{
+      background: linear-gradient(180deg, rgba(225,29,72,.95), rgba(225,29,72,.72));
+      box-shadow: 0 8px 20px rgba(225,29,72,.12);
+    }
+    button:disabled{ opacity:.55; cursor:not-allowed; filter:saturate(.7); }
+
+    /* Inputs row */
+    .inputs{
+      display:grid; grid-template-columns: 1fr 1fr 1fr;
+      gap:12px; margin-top:8px;
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.09);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding:10px;
+    }
+    .card .label{
+      color: var(--muted); font-size:12px; margin-bottom:6px;
+      font-weight:700; text-transform:uppercase; letter-spacing:.35px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    input[type="text"], textarea{
+      width:100%;
+      padding:10px 10px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(138,43,226,.75);
+      color:white;
+      outline:none;
+      font-weight:700;
+      resize:none;
+    }
+    input[type="text"]::placeholder, textarea::placeholder{
+      color: rgba(255,255,255,.75);
+      font-weight:600;
+    }
+    textarea{ min-height:44px; line-height:1.25; }
+
+    /* Title */
+    .titleRow{
+      margin:18px 0 10px;
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px;
+    }
+    .tierTitle{
+      font-size:22px; font-weight:900;
+      text-transform:uppercase; letter-spacing:.7px;
+    }
+    .hint{ color: var(--muted); font-size:12px; }
+
+    /* Tier table */
+    .tiers{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: var(--radius);
+      overflow:hidden;
+      background: rgba(255,255,255,.03);
+    }
+    .tierRow{
+      display:grid;
+      grid-template-columns: 70px 1fr;
+      min-height: var(--rowH);
+      border-top:1px solid rgba(255,255,255,.07);
+    }
+    .tierRow:first-child{ border-top:none; }
+
+    .tierLabel{
+      display:flex; align-items:center; justify-content:center;
+      font-weight:900; font-size:16px;
+      background: linear-gradient(180deg, rgba(138,43,226,.95), rgba(138,43,226,.75));
+      border-right:1px solid rgba(255,255,255,.10);
+      text-transform:uppercase;
+      padding:0 8px;
+    }
+    .tierLabel span[contenteditable="true"]{
+      outline:none;
+      border-radius:8px;
+      padding:3px 6px;
+      min-width:18px;
+      text-align:center;
+    }
+    .tierLabel span[contenteditable="true"]:focus{
+      background: rgba(0,0,0,.25);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+    }
+
+    .tierDrop{
+      padding:10px;
+      background: rgba(255,255,255,.02);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-content:flex-start;
+    }
+    .tierDrop.dragover, .bank.dragover{
+      outline:2px dashed rgba(168,85,247,.85);
+      outline-offset:-6px;
+      background: rgba(168,85,247,.07);
+    }
+
+    /* Cover tiles */
+    .cover{
+      width: var(--coverSize, 58px);
+      height: var(--coverSize, 58px);
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.2);
+      overflow:hidden;
+      position:relative;
+      cursor:grab;
+      box-shadow: 0 8px 18px rgba(0,0,0,.35);
+      flex: 0 0 auto;
+      transition: opacity .15s ease, transform .06s ease;
+    }
+    .cover img{
+      width:100%; height:100%;
+      object-fit:cover;
+      display:block;
+      pointer-events:none;
+      user-select:none;
+    }
+    .cover:active{ cursor:grabbing; }
+    .cover .badge{
+      position:absolute;
+      left:6px; top:6px;
+      background: rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.16);
+      padding:2px 6px;
+      border-radius:999px;
+      font-size:10px;
+      font-weight:800;
+      color:white;
+    }
+    .cover .del{
+      position:absolute;
+      right:6px; top:6px;
+      width:20px; height:20px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.55);
+      color:white;
+      font-weight:900;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px;
+      cursor:pointer;
+      opacity:.9;
+    }
+    .cover .del:hover{ filter:brightness(1.12); }
+    .cover.disabled{
+      opacity:.28;
+      cursor:not-allowed;
+      filter:grayscale(.25);
+    }
+
+    /* Bank */
+    .bankWrap{
+      margin-top:14px;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: var(--radius);
+      overflow:hidden;
+      background: rgba(255,255,255,.03);
+    }
+    .bankHeader{
+      padding:10px 12px;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.02);
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .bankRight{
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+      font-weight:700;
+      text-transform:none;
+      letter-spacing:0;
+    }
+    .bankSub{
+      color: var(--muted);
+      font-size:12px;
+      font-weight:800;
+    }
+
+    /* NEW: cover size control (bank header) */
+    .sizeCtl{
+      display:flex; align-items:center; gap:8px;
+      padding:6px 8px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+    }
+    .sizeCtl label{
+      color: var(--muted);
+      font-size:11px;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.35px;
+      white-space:nowrap;
+    }
+    .sizeCtl input[type="range"]{
+      width:140px;
+    }
+    .pill{
+      display:inline-flex;
+      padding:4px 9px;
+      border-radius:999px;
+      background: rgba(138,43,226,.22);
+      border:1px solid rgba(138,43,226,.45);
+      font-size:11px;
+      font-weight:900;
+      white-space:nowrap;
+    }
+
+    .bank{
+      padding:12px;
+      min-height:92px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-content:flex-start;
+    }
+
+    /* Bottom panels */
+    .bottom{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1fr 320px;
+      gap:12px;
+    }
+    .bottomLeft{
+      display:grid;
+      grid-template-rows: 1fr 1fr;
+      gap:12px;
+    }
+    .blockTitle{
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.55px;
+      margin-bottom:8px;
+      font-size:14px;
+    }
+    .blockBody{
+      color: var(--muted);
+      font-size:13px;
+      line-height:1.35;
+      white-space:pre-wrap;
+    }
+    .locked{
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-start;
+      align-items:flex-start;
+      gap:10px;
+      padding:14px;
+    }
+    .lockBadge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+      flex-wrap:wrap;
+    }
+    .gameButtons{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      width:100%;
+    }
+
+    /* Footer */
+    .footer{
+      margin-top:14px;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      color: rgba(138,43,226,.9);
+      font-weight:900;
+      letter-spacing:.4px;
+    }
+
+    @media (max-width: 900px){
+      .inputs{ grid-template-columns:1fr; }
+      .bottom{ grid-template-columns:1fr; }
+      .bottomLeft{ grid-template-rows:auto; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">SMARTIERLIST MAKER</div>
+      <div class="controls">
+        <label class="btn secondary" style="display:inline-flex;align-items:center;gap:8px;">
+          Upload covers
+          <input id="fileInput" type="file" accept="image/*" multiple style="display:none;" />
+        </label>
+        <button id="addRankBtn">Add a rank</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+        <button id="exportBtn" class="secondary">Export JSON</button>
+      </div>
+    </div>
+
+    <div class="inputs">
+      <div class="card">
+        <div class="label">
+          <span>Add covers</span>
+          <span style="color:rgba(255,255,255,.8);font-size:11px;font-weight:800;">Deezer URL import</span>
+        </div>
+        <textarea id="deezerUrls" placeholder="Colle ici 1+ URLs Deezer (album/track/artist/playlist), 1 par ligne"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button id="importDeezerBtn">Import Deezer URLs</button>
+          <button id="clearUrlsBtn" class="secondary">Clear</button>
+        </div>
+        <div style="margin-top:8px;color:var(--muted);font-size:12px;">
+          Tu peux aussi drag & drop des images sur la page. Double-clic sur une cover = retour bank.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">Rank’s score (demo)</div>
+        <input id="rankScore" type="text" placeholder="S=100, A=80, B=60..." />
+        <div style="margin-top:8px;color:var(--muted);font-size:12px;">
+          (placeholder) Tu pourras relier ça à ton scoring / reco plus tard.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="label">Local save</div>
+        <input id="addCoversHint" type="text" placeholder="autosave localStorage" readonly />
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button id="loadBtn" class="secondary">Load</button>
+          <button id="clearSaveBtn" class="danger">Clear save</button>
+        </div>
+        <div style="margin-top:8px;color:var(--muted);font-size:12px;">
+          Sauvegarde auto après chaque action.
+        </div>
+      </div>
+    </div>
+
+    <div class="titleRow">
+      <div class="tierTitle" id="tierName">NAME OF THE TIERLIST</div>
+      <div class="hint">Tip: drag covers between ranks and the bank</div>
+    </div>
+
+    <div class="tiers" id="tiers"></div>
+
+    <div class="bankWrap">
+      <div class="bankHeader">
+        <div>BANK OF ALBUM COVERS (DRAG & DROP TO A RANK)</div>
+
+        <!-- NEW: cover size option in bank header (option 2) -->
+        <div class="bankRight">
+          <div class="sizeCtl">
+            <label for="coverSize">Cover size</label>
+            <input id="coverSize" type="range" min="36" max="140" value="58" />
+            <span id="coverSizeValue" class="pill">58px</span>
+          </div>
+          <div class="bankSub" id="bankStatus">—</div>
+        </div>
+      </div>
+      <div class="bank" id="bank" data-dropzone="bank"></div>
+    </div>
+
+    <div class="bottom">
+      <div class="bottomLeft">
+        <div class="card">
+          <div class="blockTitle">Smart recommendations of albums thanks to the tierlist</div>
+          <div class="blockBody" id="recoBox">
+(placeholder) Ici, tu brancheras ton algo : similarité, scènes, genres, périodes, etc.
+          </div>
+        </div>
+        <div class="card">
+          <div class="blockTitle">Proposal for editorial playlists that support these artists</div>
+          <div class="blockBody" id="playlistBox">
+(placeholder) Ici, tu peux générer : playlists existantes à cibler + concepts éditoriaux + “next actions”.
+          </div>
+        </div>
+      </div>
+
+      <div class="card locked" id="gameBox">
+        <div class="lockBadge">
+          <span class="pill" id="lockPill">Locked</span>
+          <span>Blind mode unlocked after <b>10</b> covers uploaded</span>
+        </div>
+        <div class="blockBody" id="gameDesc">
+From a set of 10 covers, you must create a top 10 list without knowing the covers or the order of appearance.
+        </div>
+        <div class="gameButtons">
+          <button id="startBlindBtn" disabled>Start blind mode</button>
+          <button id="revealBlindBtn" class="secondary" disabled>Reveal</button>
+          <button id="endBlindBtn" class="danger" disabled>End game</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">POWERED BY DEEZER</div>
+  </div>
+
+  <script>
+    // --------- Utilities ----------
+    const STORAGE_KEY = "smarttierlist_v1";
+
+    const PLACEHOLDER_IMG = makePlaceholderDataUrl();
+    function makePlaceholderDataUrl(){
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#1f1f24"/>
+              <stop offset="1" stop-color="#0d0d10"/>
+            </linearGradient>
+          </defs>
+          <rect width="300" height="300" rx="26" ry="26" fill="url(#g)"/>
+          <circle cx="150" cy="150" r="84" fill="rgba(138,43,226,0.22)" stroke="rgba(168,85,247,0.55)" stroke-width="6"/>
+          <text x="150" y="170" text-anchor="middle" font-family="system-ui,Segoe UI,Roboto,Arial" font-size="110" fill="rgba(255,255,255,0.9)" font-weight="900">?</text>
+        </svg>`;
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.trim());
+    }
+
+    function cssEscape(str){
+      return (window.CSS && CSS.escape) ? CSS.escape(str) : str.replace(/"/g, '\\"');
+    }
+
+    // NEW: cover size apply
+    function applyCoverSize(px){
+      const val = Math.max(36, Math.min(140, Number(px) || 58));
+      document.documentElement.style.setProperty("--coverSize", `${val}px`);
+      if(coverSizeEl) coverSizeEl.value = String(val);
+      if(coverSizeValueEl) coverSizeValueEl.textContent = `${val}px`;
+    }
+
+    // --------- State ----------
+    let state = {
+      nextId: 1,
+      covers: new Map(), // id -> { id, src, meta?:{source,title,deezerUrl} }
+      ranks: [
+        { key: "S", name: "S" },
+        { key: "A", name: "A" },
+        { key: "B", name: "B" },
+        { key: "C", name: "C" },
+        { key: "D", name: "D" },
+      ],
+      placements: new Map(), // coverId -> { zone: "bank" | "rank", rankKey?: string }
+      blind: {
+        active: false,
+        revealed: false,
+        ids: [],
+        backup: null
+      },
+      // NEW: persisted UI option
+      coverSize: 58
+    };
+
+    // --------- DOM ----------
+    const tiersEl = document.getElementById("tiers");
+    const bankEl = document.getElementById("bank");
+    const bankStatusEl = document.getElementById("bankStatus");
+    const fileInput = document.getElementById("fileInput");
+    const deezerUrlsEl = document.getElementById("deezerUrls");
+
+    const addRankBtn = document.getElementById("addRankBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const exportBtn = document.getElementById("exportBtn");
+
+    const importDeezerBtn = document.getElementById("importDeezerBtn");
+    const clearUrlsBtn = document.getElementById("clearUrlsBtn");
+
+    const loadBtn = document.getElementById("loadBtn");
+    const clearSaveBtn = document.getElementById("clearSaveBtn");
+
+    const lockPill = document.getElementById("lockPill");
+    const startBlindBtn = document.getElementById("startBlindBtn");
+    const revealBlindBtn = document.getElementById("revealBlindBtn");
+    const endBlindBtn = document.getElementById("endBlindBtn");
+    const gameDesc = document.getElementById("gameDesc");
+
+    // NEW: cover size controls in bank header
+    const coverSizeEl = document.getElementById("coverSize");
+    const coverSizeValueEl = document.getElementById("coverSizeValue");
+
+    // --------- Rendering ----------
+    function renderTiers(){
+      tiersEl.innerHTML = "";
+      for(const r of state.ranks){
+        const row = document.createElement("div");
+        row.className = "tierRow";
+        row.dataset.rank = r.key;
+
+        const label = document.createElement("div");
+        label.className = "tierLabel";
+
+        const editable = document.createElement("span");
+        editable.textContent = r.name;
+        editable.title = "Double-click to rename";
+        editable.addEventListener("dblclick", () => {
+          editable.contentEditable = "true";
+          editable.focus();
+          document.execCommand?.("selectAll", false, null);
+        });
+        editable.addEventListener("blur", () => {
+          if(editable.isContentEditable){
+            editable.contentEditable = "false";
+            const next = (editable.textContent || "").trim() || r.name;
+            r.name = next;
+            editable.textContent = next;
+            saveNow();
+          }
+        });
+        editable.addEventListener("keydown", (e) => {
+          if(e.key === "Enter"){
+            e.preventDefault();
+            editable.blur();
+          }
+          if(e.key === "Escape"){
+            e.preventDefault();
+            editable.textContent = r.name;
+            editable.contentEditable = "false";
+            editable.blur();
+          }
+        });
+
+        label.appendChild(editable);
+
+        const drop = document.createElement("div");
+        drop.className = "tierDrop";
+        drop.dataset.dropzone = "rank";
+        drop.dataset.rank = r.key;
+
+        row.appendChild(label);
+        row.appendChild(drop);
+        tiersEl.appendChild(row);
+      }
+      wireDropzones();
+      renderAllCovers();
+    }
+
+    function coverEl(cover){
+      const d = document.createElement("div");
+      d.className = "cover";
+      d.dataset.coverId = String(cover.id);
+
+      const isBlind = state.blind.active;
+      const isInGame = isBlind && state.blind.ids.includes(cover.id);
+      const shouldHide = isBlind && isInGame && !state.blind.revealed;
+
+      const img = document.createElement("img");
+      img.src = shouldHide ? PLACEHOLDER_IMG : cover.src;
+
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.textContent = cover.id;
+
+      const del = document.createElement("div");
+      del.className = "del";
+      del.textContent = "✕";
+      del.title = "Delete cover";
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteCover(cover.id);
+      });
+
+      d.appendChild(img);
+      d.appendChild(badge);
+      d.appendChild(del);
+
+      const draggable = (!state.blind.active) || isInGame;
+      d.draggable = draggable;
+
+      if(!draggable){
+        d.classList.add("disabled");
+      } else {
+        d.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", String(cover.id));
+          try { e.dataTransfer.setDragImage(d, 28, 28); } catch {}
+        });
+      }
+
+      d.addEventListener("dblclick", () => {
+        if(state.blind.active && !isInGame) return;
+        moveCoverToBank(cover.id);
+      });
+
+      if(cover.meta?.deezerUrl){
+        d.title = cover.meta.deezerUrl;
+      } else if (cover.meta?.title){
+        d.title = cover.meta.title;
+      }
+
+      return d;
+    }
+
+    function renderAllCovers(){
+      bankEl.innerHTML = "";
+      document.querySelectorAll(".tierDrop").forEach(el => el.innerHTML = "");
+
+      for(const [id, cover] of state.covers){
+        const p = state.placements.get(id) || { zone:"bank" };
+        const el = coverEl(cover);
+
+        if(p.zone === "rank" && p.rankKey){
+          const drop = document.querySelector(`.tierDrop[data-rank="${cssEscape(p.rankKey)}"]`);
+          (drop || bankEl).appendChild(el);
+        } else {
+          bankEl.appendChild(el);
+        }
+      }
+
+      updateGameLock();
+      updateStatusBars();
+    }
+
+    function updateStatusBars(){
+      const hint = document.getElementById("addCoversHint");
+      const total = state.covers.size;
+      const inBank = Array.from(state.placements.values()).filter(p => !p || p.zone === "bank").length;
+      hint.value = state.blind.active
+        ? `BLIND MODE: ${state.blind.ids.length} covers in game. (Reveal to show covers)`
+        : `${total} cover(s) loaded. ${inBank} in bank. Autosaved.`;
+
+      bankStatusEl.textContent = state.blind.active
+        ? `Blind mode: drag ONLY the 10 hidden covers`
+        : `Total: ${total}`;
+    }
+
+    // --------- Drag & Drop ----------
+    function wireDropzones(){
+      const zones = document.querySelectorAll("[data-dropzone]");
+      zones.forEach(z => {
+        z.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          z.classList.add("dragover");
+        });
+        z.addEventListener("dragleave", () => z.classList.remove("dragover"));
+        z.addEventListener("drop", (e) => {
+          e.preventDefault();
+          z.classList.remove("dragover");
+          const id = Number(e.dataTransfer.getData("text/plain"));
+          if(!state.covers.has(id)) return;
+
+          const zone = z.dataset.dropzone;
+          if(zone === "bank"){
+            moveCoverToBank(id);
+          } else if(zone === "rank"){
+            const rankKey = z.dataset.rank;
+
+            if(state.blind.active && rankKey !== "__TOP10__") return;
+
+            if(state.blind.active && rankKey === "__TOP10__"){
+              const current = countCoversInRank("__TOP10__");
+              const wasAlreadyThere = (state.placements.get(id)?.zone === "rank" && state.placements.get(id)?.rankKey === "__TOP10__");
+              if(!wasAlreadyThere && current >= 10) return;
+            }
+
+            moveCoverToRank(id, rankKey);
+          }
+        });
+      });
+    }
+
+    function countCoversInRank(rankKey){
+      let n = 0;
+      for(const p of state.placements.values()){
+        if(p && p.zone === "rank" && p.rankKey === rankKey) n++;
+      }
+      return n;
+    }
+
+    function moveCoverToBank(id){
+      if(state.blind.active){
+        const isInGame = state.blind.ids.includes(id);
+        if(!isInGame) return;
+        state.placements.set(id, { zone:"bank" });
+      } else {
+        state.placements.set(id, { zone:"bank" });
+      }
+      renderAllCovers();
+      saveNow();
+      refreshBlindButtons();
+    }
+    function moveCoverToRank(id, rankKey){
+      if(state.blind.active){
+        const isInGame = state.blind.ids.includes(id);
+        if(!isInGame) return;
+        if(rankKey !== "__TOP10__") return;
+      }
+      state.placements.set(id, { zone:"rank", rankKey });
+      renderAllCovers();
+      saveNow();
+      refreshBlindButtons();
+    }
+
+    // --------- Cover lifecycle ----------
+    function deleteCover(id){
+      state.covers.delete(id);
+      state.placements.delete(id);
+      if(state.blind.active){
+        state.blind.ids = state.blind.ids.filter(x => x !== id);
+      }
+      renderAllCovers();
+      updateGameLock();
+      saveNow();
+      refreshBlindButtons();
+    }
+
+    // --------- Upload (files) ----------
+    fileInput.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      await addFilesAsCovers(files);
+      fileInput.value = "";
+    });
+
+    window.addEventListener("dragover", (e) => {
+      if(e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files")){
+        e.preventDefault();
+      }
+    });
+    window.addEventListener("drop", async (e) => {
+      if(!(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)) return;
+      e.preventDefault();
+      await addFilesAsCovers(Array.from(e.dataTransfer.files));
+    });
+
+    async function addFilesAsCovers(files){
+      const imageFiles = files.filter(f => f.type.startsWith("image/"));
+      for(const f of imageFiles){
+        const src = await fileToDataURL(f);
+        const id = state.nextId++;
+        state.covers.set(id, { id, src, meta:{ source:"file", title:f.name } });
+        state.placements.set(id, { zone:"bank" });
+      }
+      renderAllCovers();
+      updateGameLock();
+      saveNow();
+      refreshBlindButtons();
+    }
+
+    function fileToDataURL(file){
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // --------- Deezer URL import (JSONP) ----------
+    importDeezerBtn.addEventListener("click", async () => {
+      const raw = deezerUrlsEl.value || "";
+      const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if(!urls.length) return;
+
+      importDeezerBtn.disabled = true;
+      importDeezerBtn.textContent = "Importing...";
+
+      try{
+        for(const url of urls){
+          const info = parseDeezerUrl(url);
+          if(!info) continue;
+
+          const data = await deezerFetchJsonp(info.type, info.id);
+          const { image, title } = pickDeezerImageAndTitle(info.type, data);
+          if(!image) continue;
+
+          const id = state.nextId++;
+          state.covers.set(id, {
+            id,
+            src: image,
+            meta: { source:"deezer", deezerUrl:url, title: title || `${info.type} ${info.id}` }
+          });
+          state.placements.set(id, { zone:"bank" });
+
+          renderAllCovers();
+        }
+      } finally {
+        importDeezerBtn.disabled = false;
+        importDeezerBtn.textContent = "Import Deezer URLs";
+        updateGameLock();
+        saveNow();
+        refreshBlindButtons();
+      }
+    });
+
+    clearUrlsBtn.addEventListener("click", () => deezerUrlsEl.value = "");
+
+    function parseDeezerUrl(url){
+      const m = url.match(/deezer\.(com|page\.link)\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i);
+      if(!m) return null;
+      return { type: m[2].toLowerCase(), id: Number(m[3]) };
+    }
+
+    function deezerFetchJsonp(type, id){
+      const endpoint = `https://api.deezer.com/${type}/${id}?output=jsonp`;
+      return new Promise((resolve, reject) => {
+        const cb = `__dzcb_${Date.now()}_${Math.floor(Math.random()*1e6)}`;
+        const script = document.createElement("script");
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error("Deezer JSONP timeout"));
+        }, 12000);
+
+        function cleanup(){
+          clearTimeout(timeout);
+          try{ delete window[cb]; } catch {}
+          script.remove();
+        }
+
+        window[cb] = (data) => {
+          cleanup();
+          resolve(data);
+        };
+
+        script.src = `${endpoint}&callback=${cb}`;
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Deezer JSONP error"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    function pickDeezerImageAndTitle(type, data){
+      if(!data || data.error) return { image:null, title:null };
+
+      if(type === "album"){
+        return {
+          image: data.cover_xl || data.cover_big || data.cover_medium || data.cover_small || null,
+          title: data.title || null
+        };
+      }
+      if(type === "track"){
+        const a = data.album || {};
+        return {
+          image: a.cover_xl || a.cover_big || a.cover_medium || a.cover_small || null,
+          title: data.title ? `${data.title}` : null
+        };
+      }
+      if(type === "artist"){
+        return {
+          image: data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || null,
+          title: data.name || null
+        };
+      }
+      if(type === "playlist"){
+        return {
+          image: data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || null,
+          title: data.title || null
+        };
+      }
+      return { image:null, title:null };
+    }
+
+    // --------- LocalStorage save/load ----------
+    function serializeState(){
+      return {
+        nextId: state.nextId,
+        covers: Array.from(state.covers.values()),
+        ranks: state.ranks,
+        placements: Array.from(state.placements.entries()),
+        tierName: document.getElementById("tierName").textContent,
+        blind: state.blind,
+        // NEW
+        coverSize: Number(coverSizeEl?.value || 58)
+      };
+    }
+    function hydrateState(obj){
+      if(!obj) return;
+      state.nextId = Number(obj.nextId || 1);
+      state.covers = new Map((obj.covers || []).map(c => [Number(c.id), c]));
+      state.ranks = Array.isArray(obj.ranks) && obj.ranks.length ? obj.ranks : state.ranks;
+      state.placements = new Map((obj.placements || []).map(([id,p]) => [Number(id), p]));
+      state.blind = obj.blind || { active:false, revealed:false, ids:[], backup:null };
+
+      if(obj.tierName){
+        document.getElementById("tierName").textContent = obj.tierName;
+      }
+
+      // NEW: apply saved cover size
+      if(obj.coverSize) applyCoverSize(obj.coverSize);
+    }
+    function saveNow(){
+      try{
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+      }catch{}
+    }
+    function loadNow(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return false;
+        hydrateState(JSON.parse(raw));
+        return true;
+      }catch{
+        return false;
+      }
+    }
+
+    loadBtn.addEventListener("click", () => {
+      const ok = loadNow();
+      renderTiers();
+      updateGameLock();
+      refreshBlindButtons();
+      updateStatusBars();
+      if(!ok) alert("No local save found.");
+    });
+
+    clearSaveBtn.addEventListener("click", () => {
+      localStorage.removeItem(STORAGE_KEY);
+      alert("Local save cleared.");
+      updateStatusBars();
+    });
+
+    // --------- Buttons ----------
+    resetBtn.addEventListener("click", () => {
+      if(state.blind.active){
+        endBlindMode(true);
+      }
+      state.covers.clear();
+      state.placements.clear();
+      state.nextId = 1;
+      state.blind = { active:false, revealed:false, ids:[], backup:null };
+      renderAllCovers();
+      updateGameLock();
+      saveNow();
+      refreshBlindButtons();
+    });
+
+    addRankBtn.addEventListener("click", () => {
+      if(state.blind.active) return;
+      const name = prompt("New rank label (e.g. E, SS, 💎) ?");
+      if(!name) return;
+      const key = name.trim();
+      const exists = state.ranks.some(r => r.key === key);
+      if(exists){
+        alert("Rank key already exists.");
+        return;
+      }
+      state.ranks.push({ key, name: key });
+      renderTiers();
+      saveNow();
+    });
+
+    exportBtn.addEventListener("click", () => {
+      const exportObj = serializeState();
+      const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type:"application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "smarttierlist-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Editable title
+    const tierNameEl = document.getElementById("tierName");
+    tierNameEl.addEventListener("dblclick", () => {
+      const next = prompt("Tierlist name?", tierNameEl.textContent);
+      if(next && next.trim()){
+        tierNameEl.textContent = next.trim();
+        saveNow();
+      }
+    });
+
+    // --------- NEW: Cover size control wiring ----------
+    coverSizeEl.addEventListener("input", () => {
+      applyCoverSize(coverSizeEl.value);
+      saveNow();
+    });
+
+    // --------- Blind mode (mini-game) ----------
+    startBlindBtn.addEventListener("click", () => startBlindMode());
+    revealBlindBtn.addEventListener("click", () => revealBlindMode());
+    endBlindBtn.addEventListener("click", () => endBlindMode(false));
+
+    function updateGameLock(){
+      const count = state.covers.size;
+      const unlocked = count >= 10;
+
+      if(unlocked){
+        lockPill.textContent = state.blind.active ? "Blind mode" : "Unlocked";
+        lockPill.style.background = "rgba(34,197,94,.18)";
+        lockPill.style.borderColor = "rgba(34,197,94,.38)";
+      } else {
+        lockPill.textContent = "Locked";
+        lockPill.style.background = "rgba(138,43,226,.22)";
+        lockPill.style.borderColor = "rgba(138,43,226,.45)";
+      }
+
+      startBlindBtn.disabled = !unlocked || state.blind.active;
+    }
+
+    function refreshBlindButtons(){
+      const unlocked = state.covers.size >= 10;
+
+      if(!unlocked && !state.blind.active){
+        gameDesc.textContent = "From a set of 10 covers, you must create a top 10 list without knowing the covers or the order of appearance.";
+      }
+
+      startBlindBtn.disabled = !unlocked || state.blind.active;
+      revealBlindBtn.disabled = !state.blind.active || state.blind.revealed || (countCoversInRank("__TOP10__") < 10);
+      endBlindBtn.disabled = !state.blind.active;
+    }
+
+    function startBlindMode(){
+      if(state.blind.active) return;
+      if(state.covers.size < 10) return;
+
+      const ids = Array.from(state.covers.keys());
+      shuffle(ids);
+      const pick = ids.slice(0, 10);
+
+      state.blind.backup = {
+        ranks: JSON.parse(JSON.stringify(state.ranks)),
+        placements: Array.from(state.placements.entries()).map(([id,p]) => [id, {...p}]),
+      };
+
+      state.blind.active = true;
+      state.blind.revealed = false;
+      state.blind.ids = pick;
+
+      const hasTop10 = state.ranks.some(r => r.key === "__TOP10__");
+      if(!hasTop10){
+        state.ranks = [{ key:"__TOP10__", name:"TOP 10" }, ...state.ranks];
+      }
+
+      for(const id of pick){
+        state.placements.set(id, { zone:"bank" });
+      }
+
+      gameDesc.textContent = "Blind mode active: place the 10 hidden covers into TOP 10. Reveal becomes available when TOP 10 has 10 covers.";
+
+      renderTiers();
+      updateGameLock();
+      refreshBlindButtons();
+      saveNow();
+    }
+
+    function revealBlindMode(){
+      if(!state.blind.active) return;
+      if(countCoversInRank("__TOP10__") < 10) return;
+      state.blind.revealed = true;
+      renderAllCovers();
+      refreshBlindButtons();
+      saveNow();
+    }
+
+    function endBlindMode(restore){
+      if(!state.blind.active) return;
+
+      if(restore && state.blind.backup){
+        state.ranks = state.blind.backup.ranks;
+        state.placements = new Map(state.blind.backup.placements);
+      } else {
+        const top10Ids = [];
+        for(const [id,p] of state.placements.entries()){
+          if(p && p.zone === "rank" && p.rankKey === "__TOP10__"){
+            top10Ids.push(id);
+          }
+        }
+        for(const id of top10Ids){
+          state.placements.set(id, { zone:"bank" });
+        }
+        state.ranks = state.ranks.filter(r => r.key !== "__TOP10__");
+      }
+
+      state.blind = { active:false, revealed:false, ids:[], backup:null };
+      gameDesc.textContent = "From a set of 10 covers, you must create a top 10 list without knowing the covers or the order of appearance.";
+
+      renderTiers();
+      updateGameLock();
+      refreshBlindButtons();
+      saveNow();
+    }
+
+    function shuffle(arr){
+      for(let i = arr.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    // --------- Init ----------
+    (function init(){
+      // Default size first (then hydrate can override)
+      applyCoverSize(58);
+
+      // Try autoload
+      loadNow();
+
+      // Ensure slider matches saved value if any
+      applyCoverSize(Number(coverSizeEl.value || 58));
+
+      renderTiers();
+      wireDropzones();
+      updateGameLock();
+      refreshBlindButtons();
+      updateStatusBars();
+
+      // Save once to ensure schema exists
+      saveNow();
+    })();
+  </script>
+</body>
+</html>
