@@ -989,7 +989,7 @@ From a set of 10 covers, you must create a top 10 list without knowing the cover
 
     addRankBtn.addEventListener("click", () => {
       if(state.blind.active) return;
-      const name = prompt("New rank label (e.g. E, SS, 💎) ?");
+      const name = prompt("New rank label (e.g. E, 💎) ?");
       if(!name) return;
       const key = name.trim();
       const exists = state.ranks.some(r => r.key === key);
@@ -1164,3 +1164,4 @@ From a set of 10 covers, you must create a top 10 list without knowing the cover
   </script>
 </body>
 </html>
+
