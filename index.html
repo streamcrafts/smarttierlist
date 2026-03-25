@@ -1747,141 +1747,227 @@ Test your curator skills! Rank 10 random covers without seeing them first. Perfe
       });
     }
 
-    // ==================== DEEZER IMPORT ====================
-    $("importDeezerBtn").addEventListener("click", async () => {
-      const raw = deezerUrlsEl.value || "";
-      const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      
-      if (!urls.length) {
-        showToast("No URLs to import", "error");
-        return;
+// ==================== DEEZER IMPORT ====================
+$("importDeezerBtn").addEventListener("click", async () => {
+  const raw = deezerUrlsEl.value || "";
+  const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  
+  if (!urls.length) {
+    showToast("No URLs to import", "error");
+    return;
+  }
+
+  const btn = $("importDeezerBtn");
+  btn.disabled = true;
+  btn.textContent = "Importing...";
+
+  saveHistory();
+
+  try {
+    let imported = 0;
+    
+    for (const url of urls) {
+      const info = parseDeezerUrl(url);
+      if (!info) {
+        console.warn("Could not parse:", url);
+        continue;
       }
 
-      const btn = $("importDeezerBtn");
-      btn.disabled = true;
-      btn.textContent = "Importing...";
-
-      saveHistory();
-
-      try {
-        let imported = 0;
-        
-        for (const url of urls) {
-          const info = parseDeezerUrl(url);
-          if (!info) continue;
-
-          const data = await deezerFetchJsonp(info.type, info.id);
-          const { image, title, artist, genre, releaseDate } = extractDeezerData(info.type, data);
-          
-          if (!image) continue;
-
-          const id = state.nextId++;
-          state.covers.set(id, {
-            id,
-            src: image,
-            meta: {
-              source: "deezer",
-              deezerUrl: url,
-              title: title || `${info.type} ${info.id}`,
-              artist: artist || "Unknown Artist",
-              genre: genre,
-              releaseDate: releaseDate
-            }
-          });
-          
-          state.placements.set(id, { zone: "bank" });
-          imported++;
-        }
-        
-        renderAll();
-        showToast(`${imported} cover(s) imported from Deezer`);
-        
-      } catch (err) {
-        console.error(err);
-        showToast("Import failed", "error");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Import URLs";
-        saveNow();
-      }
-    });
-
-    $("clearUrlsBtn").addEventListener("click", () => {
-      deezerUrlsEl.value = "";
-    });
-
-    function parseDeezerUrl(url) {
-      const m = url.match(/deezer\.(com|page\.link)\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i);
-      if (!m) return null;
-      return { type: m[2].toLowerCase(), id: Number(m[3]) };
-    }
-
-    function deezerFetchJsonp(type, id) {
-      const endpoint = `https://api.deezer.com/${type}/${id}?output=jsonp`;
+      const data = await deezerFetchJsonp(info.type, info.id);
       
-      return new Promise((resolve, reject) => {
-        const cb = `__dzcb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-        const script = document.createElement("script");
-        const timeout = setTimeout(() => {
-          cleanup();
-          reject(new Error("Deezer JSONP timeout"));
-        }, 12000);
-
-        function cleanup() {
-          clearTimeout(timeout);
-          try { delete window[cb]; } catch {}
-          script.remove();
-        }
-
-        window[cb] = (data) => {
-          cleanup();
-          resolve(data);
-        };
-
-        script.src = `${endpoint}&callback=${cb}`;
-        script.onerror = () => {
-          cleanup();
-          reject(new Error("Deezer JSONP error"));
-        };
-        
-        document.head.appendChild(script);
-      });
-    }
-
-    function extractDeezerData(type, data) {
       if (!data || data.error) {
-        return { image: null, title: null, artist: null, genre: null, releaseDate: null };
+        console.error("Deezer API error:", data?.error);
+        continue;
       }
 
-      let image, title, artist, genre, releaseDate;
+      // Handle playlists differently - extract albums from tracks
+      if (info.type === "playlist") {
+        imported += await importPlaylistAlbums(data);
+      } else {
+        const { image, title, artist, genre, releaseDate } = extractDeezerData(info.type, data);
+        
+        if (!image) {
+          console.warn("No image for:", url);
+          continue;
+        }
 
-      if (type === "album") {
-        image = data.cover_xl || data.cover_big || data.cover_medium || data.cover_small;
-        title = data.title;
-        artist = data.artist?.name;
-        genre = data.genres?.data?.[0]?.name;
-        releaseDate = data.release_date;
-      } else if (type === "track") {
-        const a = data.album || {};
-        image = a.cover_xl || a.cover_big || a.cover_medium || a.cover_small;
-        title = data.title;
-        artist = data.artist?.name;
-        genre = data.genre_id; // You'd need to map this
-        releaseDate = a.release_date;
-      } else if (type === "artist") {
-        image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small;
-        title = data.name;
-        artist = data.name;
-        genre = "Artist";
-      } else if (type === "playlist") {
-        image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small;
-        title = data.title;
-        artist = `Playlist by ${data.creator?.name || "Unknown"}`;
-        genre = "Playlist";
+        const id = state.nextId++;
+        state.covers.set(id, {
+          id,
+          src: image,
+          meta: {
+            source: "deezer",
+            deezerUrl: url,
+            deezerType: info.type,
+            deezerId: info.id,
+            title: title || `${info.type} ${info.id}`,
+            artist: artist || "Unknown Artist",
+            genre: genre,
+            releaseDate: releaseDate
+          }
+        });
+        
+        state.placements.set(id, { zone: "bank" });
+        imported++;
       }
-
-      return { image, title, artist, genre, releaseDate };
     }
+    
+    renderAll();
+    showToast(`${imported} cover(s) imported from Deezer`);
+    
+  } catch (err) {
+    console.error("Import error:", err);
+    showToast("Import failed: " + err.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Import URLs";
+    saveNow();
+  }
+});
+
+// Import albums from playlist tracks
+async function importPlaylistAlbums(playlistData) {
+  if (!playlistData || !playlistData.tracks || !playlistData.tracks.data) {
+    console.warn("No tracks in playlist");
+    return 0;
+  }
+
+  const tracks = playlistData.tracks.data;
+  const uniqueAlbums = new Map();
+  let imported = 0;
+
+  // Collect unique albums from tracks
+  for (const track of tracks) {
+    if (!track.album || !track.album.id) continue;
+    
+    const albumId = track.album.id;
+    if (uniqueAlbums.has(albumId)) continue;
+    
+    uniqueAlbums.set(albumId, {
+      id: albumId,
+      title: track.album.title,
+      cover: track.album.cover_xl || track.album.cover_big || track.album.cover_medium,
+      artist: track.artist?.name
+    });
+  }
+
+  // If playlist has many tracks, we might need to fetch full track list
+  if (playlistData.nb_tracks > tracks.length) {
+    showToast(`Found ${playlistData.nb_tracks} tracks, loading first ${tracks.length} albums...`);
+  }
+
+  // Import each unique album
+  for (const [albumId, albumInfo] of uniqueAlbums) {
+    if (!albumInfo.cover) continue;
+
+    // Check if we already have this album
+    const exists = Array.from(state.covers.values()).some(
+      c => c.meta?.deezerType === "album" && c.meta?.deezerId === albumId
+    );
+
+    if (exists) {
+      console.log("Album already imported:", albumId);
+      continue;
+    }
+
+    const id = state.nextId++;
+    state.covers.set(id, {
+      id,
+      src: albumInfo.cover,
+      meta: {
+        source: "deezer",
+        deezerUrl: `https://www.deezer.com/album/${albumId}`,
+        deezerType: "album",
+        deezerId: albumId,
+        title: albumInfo.title,
+        artist: albumInfo.artist || "Various Artists",
+        genre: "From Playlist",
+        releaseDate: null
+      }
+    });
+    
+    state.placements.set(id, { zone: "bank" });
+    imported++;
+  }
+
+  return imported;
+}
+
+$("clearUrlsBtn").addEventListener("click", () => {
+  deezerUrlsEl.value = "";
+});
+
+function parseDeezerUrl(url) {
+  const m = url.match(/deezer\.(com|page\.link)\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i);
+  if (!m) return null;
+  return { type: m[2].toLowerCase(), id: Number(m[3]) };
+}
+
+function deezerFetchJsonp(type, id) {
+  const endpoint = `https://api.deezer.com/${type}/${id}?output=jsonp`;
+  
+  return new Promise((resolve, reject) => {
+    const cb = `__dzcb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    const script = document.createElement("script");
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("Deezer API timeout"));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      try { delete window[cb]; } catch {}
+      script.remove();
+    }
+
+    window[cb] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.src = `${endpoint}&callback=${cb}`;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("Deezer API network error"));
+    };
+    
+    document.head.appendChild(script);
+  });
+}
+
+function extractDeezerData(type, data) {
+  if (!data || data.error) {
+    return { image: null, title: null, artist: null, genre: null, releaseDate: null };
+  }
+
+  let image, title, artist, genre, releaseDate;
+
+  if (type === "album") {
+    image = data.cover_xl || data.cover_big || data.cover_medium || data.cover_small;
+    title = data.title;
+    artist = data.artist?.name;
+    genre = data.genres?.data?.[0]?.name;
+    releaseDate = data.release_date;
+  } else if (type === "track") {
+    const a = data.album || {};
+    image = a.cover_xl || a.cover_big || a.cover_medium || a.cover_small;
+    title = data.title;
+    artist = data.artist?.name;
+    releaseDate = a.release_date;
+  } else if (type === "artist") {
+    image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small;
+    title = data.name;
+    artist = data.name;
+    genre = "Artist";
+  } else if (type === "playlist") {
+    image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small;
+    title = data.title;
+    artist = `Playlist by ${data.creator?.name || "Unknown"}`;
+    genre = "Playlist";
+  }
+
+  return { image, title, artist, genre, releaseDate };
+}
 
     // ==================== PERSISTENCE ====================
     function serializeState() {
