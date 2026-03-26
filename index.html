@@ -920,7 +920,7 @@
           <button id="clearUrlsBtn" class="secondary">Clear</button>
         </div>
         <div style="margin-top:8px;color:var(--muted);font-size:11px;">
-          💡 Tip: You can also drag & drop images directly onto the page
+          💡 Tip: Open browser console (F12) to see detailed import progress
         </div>
       </div>
 
@@ -1030,7 +1030,7 @@ Test your curator skills! Rank 10 random covers without seeing them first. Perfe
 
     <!-- FOOTER -->
     <div class="footer">
-      <div>Version 2.0 Pro • Made for Deezer Curators</div>
+      <div>Version 2.0 Pro • Made for Deezer Curators with ❤️</div>
       <div class="logo">POWERED BY DEEZER</div>
     </div>
   </div>
@@ -1182,6 +1182,7 @@ Test your curator skills! Rank 10 random covers without seeing them first. Perfe
       renderBank();
       updateStats();
       updateBulkActions();
+      updateGameLock();
     }
 
     function renderTiers() {
@@ -1332,6 +1333,7 @@ Test your curator skills! Rank 10 random covers without seeing them first. Perfe
       // Image
       const img = document.createElement("img");
       img.src = shouldHide ? PLACEHOLDER_IMG : cover.src;
+      img.loading = "lazy";
       div.appendChild(img);
 
       // Badge
@@ -1747,335 +1749,408 @@ Test your curator skills! Rank 10 random covers without seeing them first. Perfe
       });
     }
 
-// ==================== DEEZER IMPORT (FIXED) ====================
-$("importDeezerBtn").addEventListener("click", async () => {
-  const raw = deezerUrlsEl.value || "";
-  const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  
-  if (!urls.length) {
-    showToast("No URLs to import", "error");
-    return;
-  }
-
-  const btn = $("importDeezerBtn");
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Importing...";
-
-  saveHistory();
-
-  try {
-    let imported = 0;
-    let errors = 0;
-    
-    for (let i = 0; i < urls.length; i++) {
-      const url = urls[i];
-      btn.textContent = `Importing ${i + 1}/${urls.length}...`;
+    // ==================== DEEZER IMPORT (FIXED WITH DEBUGGING) ====================
+    $("importDeezerBtn").addEventListener("click", async () => {
+      const raw = deezerUrlsEl.value || "";
+      const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       
-      const info = parseDeezerUrl(url);
-      if (!info) {
-        console.warn("Could not parse URL:", url);
-        errors++;
-        continue;
+      if (!urls.length) {
+        showToast("No URLs to import", "error");
+        return;
       }
 
-      console.log(`Fetching ${info.type} ${info.id}...`);
+      const btn = $("importDeezerBtn");
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Importing...";
+
+      saveHistory();
 
       try {
-        const data = await deezerFetchJsonp(info.type, info.id);
+        let imported = 0;
+        let errors = 0;
         
-        if (!data || data.error) {
-          console.error("Deezer API error:", data?.error);
-          errors++;
-          continue;
-        }
-
-        // Handle playlists - extract albums from tracks
-        if (info.type === "playlist") {
-          console.log("Processing playlist:", data.title);
-          const added = await importPlaylistAlbums(data, url);
-          imported += added;
-          console.log(`Added ${added} albums from playlist`);
-        } else {
-          // Handle single items (album, track, artist)
-          const { image, title, artist, genre, releaseDate } = extractDeezerData(info.type, data);
+        for (let i = 0; i < urls.length; i++) {
+          const url = urls[i];
+          btn.textContent = `Importing ${i + 1}/${urls.length}...`;
           
-          if (!image) {
-            console.warn("No image found for:", url);
+          const info = parseDeezerUrl(url);
+          if (!info) {
+            console.error("❌ Could not parse URL:", url);
             errors++;
             continue;
           }
 
-          // Check for duplicates
-          const exists = Array.from(state.covers.values()).some(
-            c => c.meta?.deezerType === info.type && c.meta?.deezerId === info.id
-          );
+          console.log(`📡 Fetching ${info.type} ID: ${info.id}`);
 
-          if (exists) {
-            console.log(`Already imported: ${info.type} ${info.id}`);
-            continue;
-          }
-
-          const id = state.nextId++;
-          state.covers.set(id, {
-            id,
-            src: image,
-            meta: {
-              source: "deezer",
-              deezerUrl: url,
-              deezerType: info.type,
-              deezerId: info.id,
-              title: title || `${info.type} ${info.id}`,
-              artist: artist || "Unknown Artist",
-              genre: genre || null,
-              releaseDate: releaseDate || null
+          try {
+            const data = await deezerFetchJsonp(info.type, info.id);
+            
+            console.log(`📦 Received data:`, data);
+            
+            if (!data) {
+              console.error("❌ No data returned");
+              errors++;
+              continue;
             }
-          });
-          
-          state.placements.set(id, { zone: "bank" });
-          imported++;
-        }
+            
+            if (data.error) {
+              console.error("❌ Deezer API error:", data.error);
+              errors++;
+              continue;
+            }
 
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 300));
+            // Handle playlists - extract albums from tracks
+            if (info.type === "playlist") {
+              console.log("🎵 Processing playlist:", data.title || "Unknown");
+              const added = await importPlaylistAlbums(data, url);
+              imported += added;
+              console.log(`✅ Added ${added} albums from playlist`);
+            } else {
+              // Handle single items (album, track, artist)
+              const { image, title, artist, genre, releaseDate } = extractDeezerData(info.type, data);
+              
+              if (!image) {
+                console.warn("⚠️ No image found");
+                errors++;
+                continue;
+              }
+
+              // Check for duplicates
+              const exists = Array.from(state.covers.values()).some(
+                c => c.meta?.deezerType === info.type && c.meta?.deezerId === info.id
+              );
+
+              if (exists) {
+                console.log(`ℹ️ Already imported: ${title}`);
+                continue;
+              }
+
+              const id = state.nextId++;
+              state.covers.set(id, {
+                id,
+                src: image,
+                meta: {
+                  source: "deezer",
+                  deezerUrl: url,
+                  deezerType: info.type,
+                  deezerId: info.id,
+                  title: title || `${info.type} ${info.id}`,
+                  artist: artist || "Unknown Artist",
+                  genre: genre || null,
+                  releaseDate: releaseDate || null
+                }
+              });
+              
+              state.placements.set(id, { zone: "bank" });
+              imported++;
+              console.log(`✅ Imported: ${title}`);
+            }
+
+            // Small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+          } catch (err) {
+            console.error(`❌ Error importing ${url}:`, err);
+            errors++;
+          }
+        }
+        
+        renderAll();
+        
+        if (imported > 0) {
+          showToast(`✅ ${imported} cover(s) imported from Deezer`);
+        }
+        if (errors > 0) {
+          showToast(`⚠️ ${errors} URL(s) failed to import`, "error");
+        }
+        if (imported === 0 && errors === 0) {
+          showToast("No new covers to import", "error");
+        }
         
       } catch (err) {
-        console.error(`Error importing ${url}:`, err);
-        errors++;
-      }
-    }
-    
-    renderAll();
-    
-    if (imported > 0) {
-      showToast(`✅ ${imported} cover(s) imported from Deezer`);
-    }
-    if (errors > 0) {
-      showToast(`⚠️ ${errors} URL(s) failed to import`, "error");
-    }
-    if (imported === 0 && errors === 0) {
-      showToast("No new covers to import", "error");
-    }
-    
-  } catch (err) {
-    console.error("Import error:", err);
-    showToast("Import failed: " + err.message, "error");
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
-    saveNow();
-  }
-});
-
-// Import unique albums from playlist tracks
-async function importPlaylistAlbums(playlistData, playlistUrl) {
-  console.log("Playlist data:", playlistData);
-  
-  // Check if tracks exist
-  if (!playlistData.tracks) {
-    console.error("No 'tracks' property in playlist data");
-    return 0;
-  }
-
-  // Handle both direct array and nested data structure
-  let tracks = [];
-  if (Array.isArray(playlistData.tracks)) {
-    tracks = playlistData.tracks;
-  } else if (playlistData.tracks.data && Array.isArray(playlistData.tracks.data)) {
-    tracks = playlistData.tracks.data;
-  } else {
-    console.error("Unexpected tracks structure:", playlistData.tracks);
-    return 0;
-  }
-
-  console.log(`Found ${tracks.length} tracks in playlist`);
-
-  if (tracks.length === 0) {
-    console.warn("Playlist has no tracks");
-    return 0;
-  }
-
-  const uniqueAlbums = new Map();
-  let imported = 0;
-
-  // Collect unique albums from tracks
-  for (const track of tracks) {
-    if (!track || !track.album || !track.album.id) {
-      console.log("Track missing album data:", track);
-      continue;
-    }
-    
-    const albumId = track.album.id;
-    
-    // Skip if we already collected this album
-    if (uniqueAlbums.has(albumId)) {
-      continue;
-    }
-    
-    // Get best quality cover
-    const cover = track.album.cover_xl || 
-                 track.album.cover_big || 
-                 track.album.cover_medium || 
-                 track.album.cover_small ||
-                 track.album.cover;
-    
-    if (!cover) {
-      console.log("Album has no cover:", track.album);
-      continue;
-    }
-    
-    uniqueAlbums.set(albumId, {
-      id: albumId,
-      title: track.album.title || "Unknown Album",
-      cover: cover,
-      artist: track.artist?.name || "Unknown Artist",
-      releaseDate: track.album.release_date || null
-    });
-  }
-
-  console.log(`Found ${uniqueAlbums.size} unique albums in playlist`);
-
-  // Import each unique album
-  for (const [albumId, albumInfo] of uniqueAlbums) {
-    // Check if we already have this album
-    const exists = Array.from(state.covers.values()).some(
-      c => c.meta?.deezerType === "album" && c.meta?.deezerId === albumId
-    );
-
-    if (exists) {
-      console.log("Album already imported:", albumId, albumInfo.title);
-      continue;
-    }
-
-    const id = state.nextId++;
-    state.covers.set(id, {
-      id,
-      src: albumInfo.cover,
-      meta: {
-        source: "deezer",
-        deezerUrl: `https://www.deezer.com/album/${albumId}`,
-        deezerType: "album",
-        deezerId: albumId,
-        title: albumInfo.title,
-        artist: albumInfo.artist,
-        genre: "From Playlist",
-        releaseDate: albumInfo.releaseDate
+        console.error("❌ Import error:", err);
+        showToast("Import failed: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+        saveNow();
       }
     });
-    
-    state.placements.set(id, { zone: "bank" });
-    imported++;
-  }
 
-  return imported;
-}
-
-$("clearUrlsBtn").addEventListener("click", () => {
-  deezerUrlsEl.value = "";
-  showToast("URLs cleared");
-});
-
-function parseDeezerUrl(url) {
-  // Support multiple URL formats
-  const patterns = [
-    /deezer\.com\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i,
-    /deezer\.page\.link.*\/(album|track|artist|playlist)\/(\d+)/i,
-    /deezer\.[a-z]+\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i
-  ];
-  
-  for (const pattern of patterns) {
-    const m = url.match(pattern);
-    if (m) {
-      return { type: m[1].toLowerCase(), id: Number(m[2]) };
-    }
-  }
-  
-  return null;
-}
-
-function deezerFetchJsonp(type, id) {
-  return new Promise((resolve, reject) => {
-    const cb = `__dzcb_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
-    const script = document.createElement("script");
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Deezer API timeout for ${type}/${id}`));
-    }, 20000); // Increased timeout
-
-    function cleanup() {
-      clearTimeout(timeout);
-      try { 
-        delete window[cb]; 
-      } catch(e) {
-        console.error("Cleanup error:", e);
+    // Import unique albums from playlist tracks
+    async function importPlaylistAlbums(playlistData, playlistUrl) {
+      console.log("🔍 Analyzing playlist structure...");
+      
+      // Check if tracks exist
+      if (!playlistData.tracks) {
+        console.error("❌ No 'tracks' property in playlist data");
+        console.log("Available properties:", Object.keys(playlistData));
+        return 0;
       }
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+
+      // Handle different track structures
+      let tracks = [];
+      
+      if (Array.isArray(playlistData.tracks)) {
+        console.log("✅ Tracks is an array");
+        tracks = playlistData.tracks;
+      } else if (playlistData.tracks.data && Array.isArray(playlistData.tracks.data)) {
+        console.log("✅ Tracks.data is an array");
+        tracks = playlistData.tracks.data;
+      } else {
+        console.error("❌ Unexpected tracks structure:", typeof playlistData.tracks);
+        return 0;
+      }
+
+      console.log(`📊 Found ${tracks.length} tracks in playlist`);
+
+      if (tracks.length === 0) {
+        console.warn("⚠️ Playlist has 0 tracks");
+        return 0;
+      }
+
+      const uniqueAlbums = new Map();
+      let skipped = 0;
+
+      // Collect unique albums from tracks
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        
+        if (!track || !track.album || !track.album.id) {
+          skipped++;
+          continue;
+        }
+        
+        const albumId = track.album.id;
+        
+        // Skip if we already collected this album
+        if (uniqueAlbums.has(albumId)) {
+          continue;
+        }
+        
+        // Get best quality cover
+        const cover = track.album.cover_xl || 
+                     track.album.cover_big || 
+                     track.album.cover_medium || 
+                     track.album.cover_small ||
+                     track.album.cover;
+        
+        if (!cover) {
+          skipped++;
+          continue;
+        }
+        
+        uniqueAlbums.set(albumId, {
+          id: albumId,
+          title: track.album.title || "Unknown Album",
+          cover: cover,
+          artist: track.artist?.name || "Unknown Artist",
+          releaseDate: track.album.release_date || null
+        });
+      }
+
+      console.log(`📊 Summary: ${uniqueAlbums.size} unique albums, ${skipped} tracks skipped`);
+
+      // Import each unique album
+      let imported = 0;
+      for (const [albumId, albumInfo] of uniqueAlbums) {
+        // Check if we already have this album
+        const exists = Array.from(state.covers.values()).some(
+          c => c.meta?.deezerType === "album" && c.meta?.deezerId === albumId
+        );
+
+        if (exists) {
+          console.log(`ℹ️ Album already imported: ${albumInfo.title}`);
+          continue;
+        }
+
+        const id = state.nextId++;
+        state.covers.set(id, {
+          id,
+          src: albumInfo.cover,
+          meta: {
+            source: "deezer",
+            deezerUrl: `https://www.deezer.com/album/${albumId}`,
+            deezerType: "album",
+            deezerId: albumId,
+            title: albumInfo.title,
+            artist: albumInfo.artist,
+            genre: "From Playlist",
+            releaseDate: albumInfo.releaseDate
+          }
+        });
+        
+        state.placements.set(id, { zone: "bank" });
+        imported++;
+      }
+
+      console.log(`✅ Successfully imported ${imported} new albums`);
+      return imported;
+    }
+
+    $("clearUrlsBtn").addEventListener("click", () => {
+      deezerUrlsEl.value = "";
+      showToast("URLs cleared");
+    });
+
+    function parseDeezerUrl(url) {
+      // Support multiple URL formats
+      const patterns = [
+        /deezer\.com\/(?:[a-z]{2}\/)?(album|track|artist|playlist)\/(\d+)/i,
+        /deezer\.page\.link.*\/(album|track|artist|playlist)\/(\d+)/i,
+      ];
+      
+      for (const pattern of patterns) {
+        const m = url.match(pattern);
+        if (m) {
+          console.log(`✅ Parsed URL: type=${m[1]}, id=${m[2]}`);
+          return { type: m[1].toLowerCase(), id: Number(m[2]) };
+        }
+      }
+      
+      console.error(`❌ URL doesn't match pattern: ${url}`);
+      return null;
+    }
+
+    function deezerFetchJsonp(type, id) {
+      return new Promise((resolve, reject) => {
+        const cb = `deezer_callback_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+        const script = document.createElement("script");
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error(`Timeout: Deezer API didn't respond after 25 seconds`));
+        }, 25000);
+
+        function cleanup() {
+          clearTimeout(timeout);
+          try { delete window[cb]; } catch(e) {}
+          if (script.parentNode) {
+            script.parentNode.removeChild(script);
+          }
+        }
+
+        window[cb] = (data) => {
+          console.log(`✅ JSONP callback received for ${type}/${id}`);
+          cleanup();
+          resolve(data);
+        };
+
+        const endpoint = `https://api.deezer.com/${type}/${id}`;
+        const fullUrl = `${endpoint}?output=jsonp&callback=${cb}&limit=100`;
+        script.src = fullUrl;
+        
+        console.log(`📡 Loading: ${fullUrl}`);
+        
+        script.onerror = (e) => {
+          cleanup();
+          console.error("❌ Script loading error:", e);
+          reject(new Error(`Network error loading ${type}/${id}`));
+        };
+        
+        document.head.appendChild(script);
+      });
+    }
+
+    function extractDeezerData(type, data) {
+      if (!data || data.error) {
+        console.error("❌ Data error:", data?.error);
+        return { image: null, title: null, artist: null, genre: null, releaseDate: null };
+      }
+
+      let image, title, artist, genre, releaseDate;
+
+      switch(type) {
+        case "album":
+          image = data.cover_xl || data.cover_big || data.cover_medium || data.cover_small || data.cover;
+          title = data.title;
+          artist = data.artist?.name;
+          genre = data.genres?.data?.[0]?.name;
+          releaseDate = data.release_date;
+          break;
+          
+        case "track":
+          const album = data.album || {};
+          image = album.cover_xl || album.cover_big || album.cover_medium || album.cover_small || album.cover;
+          title = data.title;
+          artist = data.artist?.name;
+          releaseDate = album.release_date;
+          break;
+          
+        case "artist":
+          image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || data.picture;
+          title = data.name;
+          artist = data.name;
+          genre = "Artist";
+          break;
+          
+        case "playlist":
+          image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || data.picture;
+          title = data.title;
+          artist = `Playlist by ${data.creator?.name || "Unknown"}`;
+          genre = "Playlist";
+          break;
+      }
+
+      return { image, title, artist, genre, releaseDate };
+    }
+
+    // ==================== PERSISTENCE ====================
+    function serializeState() {
+      return {
+        nextId: state.nextId,
+        covers: Array.from(state.covers.values()),
+        ranks: state.ranks,
+        placements: Array.from(state.placements.entries()),
+        tierName: tierNameEl.textContent,
+        blind: state.blind,
+        coverSize: state.coverSize
+      };
+    }
+
+    function hydrateState(obj) {
+      if (!obj) return;
+      
+      state.nextId = Number(obj.nextId || 1);
+      state.covers = new Map((obj.covers || []).map(c => [Number(c.id), c]));
+      state.ranks = Array.isArray(obj.ranks) && obj.ranks.length ? obj.ranks : state.ranks;
+      state.placements = new Map((obj.placements || []).map(([id, p]) => [Number(id), p]));
+      state.blind = obj.blind || { active: false, revealed: false, ids: [], backup: null };
+
+      if (obj.tierName) {
+        tierNameEl.textContent = obj.tierName;
+      }
+
+      if (obj.coverSize) {
+        applyCoverSize(obj.coverSize);
       }
     }
 
-    window[cb] = (data) => {
-      cleanup();
-      console.log(`Received data for ${type}/${id}:`, data);
-      resolve(data);
-    };
+    function saveNow() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+        $("saveStatus").textContent = "✓ Saved";
+        $("saveStatus").style.background = "rgba(34,197,94,.2)";
+        $("saveStatus").style.borderColor = "rgba(34,197,94,.4)";
+      } catch (err) {
+        console.error("Save failed:", err);
+        $("saveStatus").textContent = "⚠ Save failed";
+        $("saveStatus").style.background = "rgba(225,29,72,.2)";
+        $("saveStatus").style.borderColor = "rgba(225,29,72,.4)";
+      }
+    }
 
-    const endpoint = `https://api.deezer.com/${type}/${id}`;
-    script.src = `${endpoint}?output=jsonp&callback=${cb}`;
-    
-    script.onerror = (e) => {
-      cleanup();
-      console.error("Script error:", e);
-      reject(new Error(`Failed to load ${type}/${id} from Deezer API`));
-    };
-    
-    document.head.appendChild(script);
-    console.log(`Loading: ${script.src}`);
-  });
-}
-
-function extractDeezerData(type, data) {
-  if (!data || data.error) {
-    console.error("Data error:", data?.error);
-    return { image: null, title: null, artist: null, genre: null, releaseDate: null };
-  }
-
-  let image, title, artist, genre, releaseDate;
-
-  switch(type) {
-    case "album":
-      image = data.cover_xl || data.cover_big || data.cover_medium || data.cover_small || data.cover;
-      title = data.title;
-      artist = data.artist?.name;
-      genre = data.genres?.data?.[0]?.name;
-      releaseDate = data.release_date;
-      break;
-      
-    case "track":
-      const album = data.album || {};
-      image = album.cover_xl || album.cover_big || album.cover_medium || album.cover_small || album.cover;
-      title = data.title;
-      artist = data.artist?.name;
-      releaseDate = album.release_date;
-      break;
-      
-    case "artist":
-      image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || data.picture;
-      title = data.name;
-      artist = data.name;
-      genre = "Artist";
-      break;
-      
-    case "playlist":
-      image = data.picture_xl || data.picture_big || data.picture_medium || data.picture_small || data.picture;
-      title = data.title;
-      artist = `Playlist by ${data.creator?.name || "Unknown"}`;
-      genre = "Playlist";
-      break;
-  }
-
-  return { image, title, artist, genre, releaseDate };
-}
+    function loadNow() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return false;
+        
+        hydrateState(JSON.parse(raw));
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
     // ==================== BUTTONS ====================
     $("loadBtn").addEventListener("click", () => {
@@ -2389,10 +2464,9 @@ function extractDeezerData(type, data) {
       saveHistory();
       
       renderAll();
-      updateGameLock();
       
       console.log("🎵 SmartTierlist Maker Pro v2.0 initialized");
-      console.log("💡 Tip: Use Ctrl+Z to undo, Ctrl+F to search, 1-5 to assign ranks");
+      console.log("💡 Open Console (F12) to see detailed import logs");
     })();
   </script>
 </body>
